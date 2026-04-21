@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ISL Translator — Live Translation</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --glass-bg: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --text-primary: #ffffff;
+            --text-secondary: #94a3b8;
+            --accent-gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+            --accent-hover: linear-gradient(135deg, #4f46e5 0%, #9333ea 100%);
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            min-height: 100vh;
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.15) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(168, 85, 247, 0.15) 0px, transparent 50%);
+        }
+
+        /* ========= NAV ========= */
+        nav {
+            display: flex;
+            justify-content: center;
+            gap: 0.5rem;
+            padding: 1.5rem;
+        }
+        nav button {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 0.75rem 2rem;
+            color: var(--text-secondary);
+            font-family: inherit;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        nav button.active {
+            background: var(--accent-gradient);
+            color: white;
+            border-color: transparent;
+            box-shadow: 0 8px 20px -8px rgba(168, 85, 247, 0.5);
+        }
+        nav button:hover:not(.active) {
+            border-color: #a855f7;
+            color: white;
+        }
+
+        /* ========= HEADER ========= */
+        header {
+            text-align: center;
+            padding: 0 1rem 1rem;
+        }
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -1px;
+        }
+        .subtitle {
+            color: var(--text-secondary);
+            font-size: 1rem;
+            margin-top: 0.25rem;
+        }
+
+        /* ========= MAIN CONTAINER ========= */
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 0 1.5rem 2rem;
+        }
+
+        /* ========= PANELS ========= */
+        .panel {
+            display: none;
+        }
+        .panel.active {
+            display: block;
+        }
+
+        .glass-panel {
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            padding: 2rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        /* ========= TEXT TO SIGN ========= */
+        label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 0.5rem;
+            display: block;
+        }
+
+        textarea {
+            width: 100%;
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 1rem;
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 1.1rem;
+            resize: none;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+            margin-bottom: 1rem;
+        }
+        textarea:focus {
+            outline: none;
+            border-color: #a855f7;
+            box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.2);
+        }
+        textarea::placeholder { color: rgba(255, 255, 255, 0.3); }
+
+        .btn-primary {
+            background: var(--accent-gradient);
+            border: none;
+            border-radius: 12px;
+            padding: 1rem 2rem;
+            color: white;
+            font-family: inherit;
+            font-size: 1.05rem;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            transition: transform 0.2s ease, filter 0.2s ease;
+            box-shadow: 0 10px 20px -10px rgba(168, 85, 247, 0.5);
+            margin-bottom: 1rem;
+        }
+        .btn-primary:hover { transform: translateY(-2px); filter: brightness(1.1); }
+        .btn-primary:active { transform: translateY(1px); }
+
+        .video-output {
+            width: 100%;
+            height: 350px;
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .video-output video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            display: none;
+        }
+        .status-msg {
+            color: var(--text-secondary);
+            font-size: 1rem;
+        }
+        .loader {
+            border: 3px solid rgba(255,255,255,0.1);
+            border-top: 3px solid #a855f7;
+            border-radius: 50%;
+            width: 36px;
+            height: 36px;
+            animation: spin 1s linear infinite;
+            display: none;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ========= LIVE CAMERA ========= */
+        .camera-layout {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 1.5rem;
+        }
+
+        .cam-box {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 4/3;
+            background: rgba(0, 0, 0, 0.6);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            overflow: hidden;
+        }
+        .cam-box video, .cam-box canvas {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .cam-box canvas {
+            z-index: 2;
+        }
+
+        /* Live status indicator */
+        .live-badge {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            z-index: 3;
+            background: rgba(239, 68, 68, 0.9);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 1px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .live-dot {
+            width: 8px;
+            height: 8px;
+            background: white;
+            border-radius: 50%;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        /* Recognized text display */
+        .recognition-box {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            min-height: 120px;
+        }
+        .recognition-box h3 {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+            margin-bottom: 0.75rem;
+        }
+        #recognized-text {
+            font-size: 2rem;
+            font-weight: 700;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            min-height: 2.5rem;
+            transition: all 0.3s ease;
+        }
+        #confidence-bar {
+            margin-top: 0.75rem;
+            height: 6px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        #confidence-fill {
+            height: 100%;
+            background: var(--accent-gradient);
+            border-radius: 3px;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        .sentence-log {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: rgba(0,0,0,0.2);
+            border-radius: 12px;
+            min-height: 50px;
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            word-wrap: break-word;
+        }
+
+        .cam-controls {
+            display: flex;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+        .cam-controls button {
+            flex: 1;
+            padding: 0.75rem;
+            border-radius: 12px;
+            border: 1px solid var(--glass-border);
+            background: var(--glass-bg);
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .cam-controls button:hover {
+            border-color: #a855f7;
+        }
+        .cam-controls button.active-cam {
+            background: var(--accent-gradient);
+            border-color: transparent;
+        }
+
+        /* Speech controls */
+        .speech-controls {
+            display: flex;
+            gap: 0.75rem;
+            margin-top: 0.75rem;
+            align-items: center;
+        }
+        .speech-controls button {
+            padding: 0.65rem 1.25rem;
+            border-radius: 12px;
+            border: 1px solid var(--glass-border);
+            background: var(--glass-bg);
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .speech-controls button:hover {
+            border-color: #a855f7;
+        }
+        .speech-controls button.speaking {
+            background: var(--accent-gradient);
+            border-color: transparent;
+            animation: pulse 1s ease-in-out infinite;
+        }
+        .auto-speak-toggle {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-left: auto;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            cursor: pointer;
+            user-select: none;
+        }
+        .auto-speak-toggle input[type="checkbox"] {
+            accent-color: #a855f7;
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+        }
+
+        /* Gesture reference */
+        .gesture-ref {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: rgba(0,0,0,0.2);
+            border-radius: 12px;
+        }
+        .gesture-ref h4 {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+        }
+        .gesture-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+            gap: 0.5rem;
+        }
+        .gesture-item {
+            background: rgba(255,255,255,0.05);
+            border-radius: 8px;
+            padding: 0.5rem;
+            text-align: center;
+            font-size: 0.85rem;
+        }
+        .gesture-item .emoji { font-size: 1.5rem; }
+        .gesture-item .label { color: var(--text-secondary); margin-top: 0.25rem; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.98); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        @media (max-width: 600px) {
+            h1 { font-size: 1.8rem; }
+            .glass-panel { padding: 1.25rem; }
+            #recognized-text { font-size: 1.5rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Navigation Tabs -->
+    <nav>
+        <button class="active" onclick="switchTab('text-to-sign')">Text → ISL</button>
+        <button onclick="switchTab('live-camera')">📷 Live Camera</button>
+    </nav>
+
+    <header>
+        <h1>Indian Sign Language</h1>
+        <p class="subtitle">AI-Powered Translation Engine</p>
+    </header>
+
+    <div class="container">
+
+        <!-- ========= TEXT TO SIGN PANEL ========= -->
+        <div class="panel active" id="panel-text-to-sign">
+            <div class="glass-panel">
+                <label for="text-input">Enter English Text</label>
+                <textarea id="text-input" rows="3" placeholder="E.g. 'hello this is good...'"></textarea>
+                <button class="btn-primary" id="translate-btn">Translate to ISL</button>
+                <div class="video-output">
+                    <div class="loader" id="loader"></div>
+                    <div class="status-msg" id="status-msg">Enter text to begin translation.</div>
+                    <video id="isl-video" autoplay loop muted playsinline></video>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========= LIVE CAMERA PANEL ========= -->
+        <div class="panel" id="panel-live-camera">
+            <div class="glass-panel">
+                <div class="cam-controls">
+                    <button id="btn-start-cam" class="active-cam" onclick="startCamera()">▶ Start Camera</button>
+                    <button id="btn-stop-cam" onclick="stopCamera()">⏹ Stop</button>
+                    <button onclick="clearSentence()">🗑 Clear</button>
+                </div>
+
+                <div class="cam-box" id="cam-box">
+                    <div class="live-badge" id="live-badge" style="display:none;">
+                        <div class="live-dot"></div>LIVE
+                    </div>
+                    <video id="webcam" autoplay playsinline muted></video>
+                    <canvas id="overlay-canvas"></canvas>
+                </div>
+
+                <div class="recognition-box">
+                    <h3>Detected Sign</h3>
+                    <div id="recognized-text">Waiting for camera...</div>
+                    <div id="confidence-bar"><div id="confidence-fill"></div></div>
+                </div>
+
+                <div class="sentence-log" id="sentence-log">
+                    <em style="color: rgba(255,255,255,0.3)">Recognized signs will appear here as a sentence...</em>
+                </div>
+
+                <div class="speech-controls">
+                    <button id="btn-speak" onclick="speakSentence()">🔊 Speak Sentence</button>
+                    <button id="btn-stop-speak" onclick="stopSpeaking()">⏹ Stop</button>
+                    <label class="auto-speak-toggle">
+                        <input type="checkbox" id="auto-speak-toggle" checked>
+                        Auto-speak each sign
+                    </label>
+                </div>
+
+                <div class="gesture-ref">
+                    <h4>Supported Gestures</h4>
+                    <div class="gesture-grid">
+                        <div class="gesture-item"><div class="emoji">✋</div><div class="label">Hello / Stop</div></div>
+                        <div class="gesture-item"><div class="emoji">👍</div><div class="label">Good</div></div>
+                        <div class="gesture-item"><div class="emoji">👎</div><div class="label">Bad</div></div>
+                        <div class="gesture-item"><div class="emoji">✊</div><div class="label">Yes</div></div>
+                        <div class="gesture-item"><div class="emoji">☝️</div><div class="label">You</div></div>
+                        <div class="gesture-item"><div class="emoji">✌️</div><div class="label">Peace</div></div>
+                        <div class="gesture-item"><div class="emoji">🤙</div><div class="label">Call</div></div>
+                        <div class="gesture-item"><div class="emoji">🤟</div><div class="label">Love</div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MediaPipe Hands -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <script>
+    // ==========================================
+    //  TAB SWITCHING
+    // ==========================================
+    function switchTab(tabId) {
+        document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+        document.getElementById('panel-' + tabId).classList.add('active');
+        event.target.classList.add('active');
+    }
+
+    // ==========================================
+    //  TEXT-TO-SIGN (existing functionality)
+    // ==========================================
+    const API_URL = "/translate";
+    const translateBtn = document.getElementById('translate-btn');
+    const textInput = document.getElementById('text-input');
+    const videoEl = document.getElementById('isl-video');
+    const loader = document.getElementById('loader');
+    const statusMsg = document.getElementById('status-msg');
+
+    translateBtn.addEventListener('click', async () => {
+        const text = textInput.value.trim();
+        if (!text) { alert("Enter some text!"); return; }
+
+        videoEl.style.display = 'none';
+        statusMsg.style.display = 'none';
+        loader.style.display = 'block';
+        translateBtn.disabled = true;
+        translateBtn.innerText = "Translating...";
+
+        try {
+            const res = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text })
+            });
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.detail || `Server Error: ${res.status}`);
+            }
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            if (videoEl.src) URL.revokeObjectURL(videoEl.src);
+            videoEl.src = url;
+            videoEl.style.display = 'block';
+            loader.style.display = 'none';
+        } catch (e) {
+            statusMsg.innerText = "🚨 " + e.message;
+            statusMsg.style.color = "#ef4444";
+            statusMsg.style.display = 'block';
+            loader.style.display = 'none';
+        } finally {
+            translateBtn.disabled = false;
+            translateBtn.innerText = "Translate to ISL";
+        }
+    });
+
+    textInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); translateBtn.click(); }
+    });
+
+    // ==========================================
+    //  LIVE CAMERA — SIGN-TO-TEXT
+    // ==========================================
+    const webcamEl = document.getElementById('webcam');
+    const canvasEl = document.getElementById('overlay-canvas');
+    const canvasCtx = canvasEl.getContext('2d');
+    const recognizedTextEl = document.getElementById('recognized-text');
+    const confidenceFill = document.getElementById('confidence-fill');
+    const sentenceLog = document.getElementById('sentence-log');
+    const liveBadge = document.getElementById('live-badge');
+
+    let camera = null;
+    let hands = null;
+    let isRunning = false;
+    let sentence = [];
+    let lastSign = '';
+    let lastSignTime = 0;
+    let holdStartTime = 0;
+    const HOLD_THRESHOLD = 800; // ms to hold a sign before it's committed to sentence
+    const COOLDOWN = 1500;      // ms between same sign commits
+
+    // ---- MediaPipe Hands Setup ----
+    function initHands() {
+        hands = new Hands({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+        });
+        hands.setOptions({
+            maxNumHands: 2,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.7,
+            minTrackingConfidence: 0.5
+        });
+        hands.onResults(onHandResults);
+    }
+
+    function startCamera() {
+        if (isRunning) return;
+        if (!hands) initHands();
+
+        // Resize canvas to match video
+        const box = document.getElementById('cam-box');
+        canvasEl.width = box.clientWidth;
+        canvasEl.height = box.clientHeight;
+
+        camera = new Camera(webcamEl, {
+            onFrame: async () => {
+                await hands.send({ image: webcamEl });
+            },
+            width: 640,
+            height: 480
+        });
+        camera.start();
+        isRunning = true;
+        liveBadge.style.display = 'flex';
+        recognizedTextEl.innerText = 'Show a sign...';
+        document.getElementById('btn-start-cam').classList.add('active-cam');
+    }
+
+    function stopCamera() {
+        if (camera) {
+            camera.stop();
+            camera = null;
+        }
+        isRunning = false;
+        liveBadge.style.display = 'none';
+        canvasCtx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+        recognizedTextEl.innerText = 'Camera stopped.';
+        confidenceFill.style.width = '0%';
+        document.getElementById('btn-start-cam').classList.remove('active-cam');
+    }
+
+    function clearSentence() {
+        sentence = [];
+        sentenceLog.innerHTML = '<em style="color: rgba(255,255,255,0.3)">Cleared. Start signing...</em>';
+    }
+
+    // ---- Hand Landmark Processing ----
+    function onHandResults(results) {
+        // Draw camera feed + landmarks on overlay canvas
+        canvasCtx.save();
+        canvasCtx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+
+        if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+            for (const landmarks of results.multiHandLandmarks) {
+                // Draw connectors
+                drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {
+                    color: 'rgba(168, 85, 247, 0.6)',
+                    lineWidth: 2
+                });
+                // Draw landmarks
+                drawLandmarks(canvasCtx, landmarks, {
+                    color: '#a855f7',
+                    lineWidth: 1,
+                    radius: 3
+                });
+            }
+
+            // Classify gesture from first detected hand
+            const lm = results.multiHandLandmarks[0];
+            const handedness = results.multiHandedness[0]?.label || 'Right';
+            const gesture = classifyGesture(lm, handedness);
+
+            if (gesture.name) {
+                recognizedTextEl.innerText = gesture.name;
+                confidenceFill.style.width = (gesture.confidence * 100) + '%';
+
+                // Hold logic: same sign held for HOLD_THRESHOLD → commit to sentence
+                const now = Date.now();
+                if (gesture.name === lastSign) {
+                    if (now - holdStartTime > HOLD_THRESHOLD && now - lastSignTime > COOLDOWN) {
+                        commitSign(gesture.name);
+                        lastSignTime = now;
+                    }
+                } else {
+                    lastSign = gesture.name;
+                    holdStartTime = now;
+                }
+            } else {
+                recognizedTextEl.innerText = 'No sign detected';
+                confidenceFill.style.width = '0%';
+                lastSign = '';
+            }
+        } else {
+            recognizedTextEl.innerText = 'No hand detected';
+            confidenceFill.style.width = '0%';
+            lastSign = '';
+        }
+
+        canvasCtx.restore();
+    }
+
+    function commitSign(signName) {
+        sentence.push(signName);
+        sentenceLog.innerText = sentence.join(' ');
+        // Flash effect
+        sentenceLog.style.borderColor = '#a855f7';
+        setTimeout(() => { sentenceLog.style.borderColor = 'transparent'; }, 300);
+
+        // Auto-speak if enabled
+        if (document.getElementById('auto-speak-toggle').checked) {
+            speakText(signName);
+        }
+    }
+
+    // ==========================================
+    //  SPEECH SYNTHESIS (Text-to-Speech)
+    // ==========================================
+    function speakText(text) {
+        if (!('speechSynthesis' in window)) {
+            console.warn('Speech synthesis not supported');
+            return;
+        }
+        // Cancel any ongoing speech before speaking new text
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'en-IN';
+        utterance.rate = 0.9;
+        utterance.pitch = 1;
+        // Try to pick an Indian English voice if available
+        const voices = window.speechSynthesis.getVoices();
+        const indianVoice = voices.find(v => v.lang === 'en-IN') || voices.find(v => v.lang.startsWith('en'));
+        if (indianVoice) utterance.voice = indianVoice;
+        window.speechSynthesis.speak(utterance);
+    }
+
+    function speakSentence() {
+        if (sentence.length === 0) return;
+        const fullText = sentence.join(' ');
+        speakText(fullText);
+        // Visual feedback
+        const btn = document.getElementById('btn-speak');
+        btn.classList.add('speaking');
+        const utterance = new SpeechSynthesisUtterance(fullText);
+        utterance.onend = () => btn.classList.remove('speaking');
+    }
+
+    function stopSpeaking() {
+        window.speechSynthesis.cancel();
+        document.getElementById('btn-speak').classList.remove('speaking');
+    }
+
+    // Preload voices (some browsers load async)
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.getVoices();
+        window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+    }
+
+    // ==========================================
+    //  GESTURE CLASSIFIER (Landmark-Based)
+    // ==========================================
+    //
+    // MediaPipe Hand Landmarks:
+    //   0: WRIST
+    //   1-4: THUMB (CMC, MCP, IP, TIP)
+    //   5-8: INDEX (MCP, PIP, DIP, TIP)
+    //   9-12: MIDDLE (MCP, PIP, DIP, TIP)
+    //   13-16: RING (MCP, PIP, DIP, TIP)
+    //   17-20: PINKY (MCP, PIP, DIP, TIP)
+
+    function classifyGesture(lm, handedness) {
+        const fingers = getFingerStates(lm, handedness);
+        // fingers = [thumb, index, middle, ring, pinky] — true if extended
+
+        const [thumb, index, middle, ring, pinky] = fingers;
+        const allExtended = thumb && index && middle && ring && pinky;
+        const allCurled = !thumb && !index && !middle && !ring && !pinky;
+
+        // --- Pattern Matching ---
+
+        // HELLO / STOP — All fingers extended, open palm
+        if (allExtended) {
+            return { name: "HELLO", confidence: 0.9 };
+        }
+
+        // GOOD — Thumbs up (only thumb extended)
+        if (thumb && !index && !middle && !ring && !pinky) {
+            return { name: "GOOD", confidence: 0.88 };
+        }
+
+        // BAD — Thumbs down (thumb extended + hand inverted: thumb tip below wrist)
+        if (thumb && !index && !middle && !ring && !pinky && lm[4].y > lm[0].y) {
+            return { name: "BAD", confidence: 0.85 };
+        }
+
+        // YES — Fist (no fingers extended)
+        if (allCurled) {
+            return { name: "YES", confidence: 0.8 };
+        }
+
+        // YOU — Only index finger pointing
+        if (!thumb && index && !middle && !ring && !pinky) {
+            return { name: "YOU", confidence: 0.85 };
+        }
+
+        // PEACE / TWO — Index + Middle extended
+        if (!thumb && index && middle && !ring && !pinky) {
+            return { name: "PEACE", confidence: 0.85 };
+        }
+
+        // THREE — Index + Middle + Ring extended
+        if (!thumb && index && middle && ring && !pinky) {
+            return { name: "THREE", confidence: 0.8 };
+        }
+
+        // FOUR — All except thumb
+        if (!thumb && index && middle && ring && pinky) {
+            return { name: "FOUR", confidence: 0.8 };
+        }
+
+        // LOVE (ILY) — Thumb + Index + Pinky extended
+        if (thumb && index && !middle && !ring && pinky) {
+            return { name: "LOVE", confidence: 0.88 };
+        }
+
+        // CALL — Thumb + Pinky extended (hang loose)
+        if (thumb && !index && !middle && !ring && pinky) {
+            return { name: "CALL", confidence: 0.85 };
+        }
+
+        // OK — Thumb + Index close together, others extended
+        const thumbIndexDist = distance(lm[4], lm[8]);
+        if (thumbIndexDist < 0.05 && middle && ring && pinky) {
+            return { name: "OK", confidence: 0.82 };
+        }
+
+        return { name: "", confidence: 0 };
+    }
+
+    function getFingerStates(lm, handedness) {
+        // For each finger, check if extended based on landmark positions
+        // Thumb: special case (use x-axis for left/right hand)
+        // Other fingers: fingertip above PIP joint (lower y = higher on screen)
+
+        const isRightHand = handedness === 'Right';
+
+        // Thumb: compare tip.x vs IP.x (account for hand mirror in webcam)
+        // In webcam (mirrored): right hand thumb extends left, left hand extends right
+        const thumbExtended = isRightHand
+            ? lm[4].x < lm[3].x   // Right hand in mirrored view
+            : lm[4].x > lm[3].x;  // Left hand in mirrored view
+
+        // Index: tip above PIP
+        const indexExtended = lm[8].y < lm[6].y;
+
+        // Middle: tip above PIP
+        const middleExtended = lm[12].y < lm[10].y;
+
+        // Ring: tip above PIP
+        const ringExtended = lm[16].y < lm[14].y;
+
+        // Pinky: tip above PIP
+        const pinkyExtended = lm[20].y < lm[18].y;
+
+        return [thumbExtended, indexExtended, middleExtended, ringExtended, pinkyExtended];
+    }
+
+    function distance(a, b) {
+        return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2 + (a.z - b.z) ** 2);
+    }
+
+    </script>
+</body>
+</html>

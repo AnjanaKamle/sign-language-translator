@@ -248,16 +248,9 @@ model.sign_embedding_model = "mediapipe-world"
 model.text_language = slt.languages.text.English()
 sign_2 = model.translate("This is an apple.")
 sign_2.save("this-is-an-apple.csv", overwrite=True)
-
-# ==== Hindi ==== #
-model.text_language = slt.TextLanguageCodes.HINDI
-sign_3 = model.translate("कैसे हैं आप?") # "how-are-you"
-sign_3.save_animation("how-are-you.gif", overwrite=True)
 ```
 
-| ![this very good is](https://github.com/sign-language-translator/sign-language-translator/assets/118578823/7f4ff312-df03-4b11-837b-5fb895c9f08e) | <picture><source media="(prefers-color-scheme: dark)" srcset="https://github.com/user-attachments/assets/4d54a197-d723-4cc4-a3ba-cae98e681003" /><source media="(prefers-color-scheme: light)" srcset="https://github.com/user-attachments/assets/45e71098-7a94-4a9e-ad24-1773369b65d5" /><img alt="how are you (landmark 3d plot)" src="https://github.com/user-attachments/assets/45e71098-7a94-4a9e-ad24-1773369b65d5" /></picture> |
-| :-: | :-: |
-| "یہ بہت اچھا ہے۔" (this-very-good-is) | "कैसे हैं आप?" (how-are-you) |
+</br>
 
 </br>
 
@@ -284,7 +277,6 @@ slt.Landmarks(embedding.reshape((-1, 75, 5)),
 ```python
 # custom translator (https://slt.readthedocs.io/en/latest/#building-custom-translators)
 help(slt.languages.SignLanguage)
-help(slt.languages.text.Urdu)
 help(slt.models.ConcatenativeSynthesis)
 ```
 
@@ -309,8 +301,8 @@ Commands:
 **Generate training examples**: write a sentence with a language model and synthesize a sign language video from it with a single command:
 
 ```bash
-slt translate --model-code rule-based --text-lang hindi --sign-lang in-sl --sign-format video \
-"$(slt complete '<' --model-code hindi-ngram --join '')"
+slt translate --model-code rule-based --text-lang english --sign-lang in-sl --sign-format video \
+"this is very good"
 ```
 
 ## Languages
@@ -328,8 +320,6 @@ Available Functions:
 | Name | Vocabulary | Ambiguous tokens | Signs |
 | - | - | - | - |
 | [English](https://github.com/sign-language-translator/sign-language-translator/blob/main/sign_language_translator/languages/text/english.py) | 1591 words+phrases | 167 | 776 |
-| [Urdu](https://github.com/sign-language-translator/sign-language-translator/blob/main/sign_language_translator/languages/text/urdu.py)    | 2080 words+phrases | 227 | 776 |
-| [Hindi](https://github.com/sign-language-translator/sign-language-translator/blob/main/sign_language_translator/languages/text/hindi.py)   |  137 words+phrases |   5 |  84 |
 
 </details>
 
@@ -523,9 +513,7 @@ See the `code` at [Build Custom Translator section in ReadTheDocs](https://sign-
     │   │
     │   └── text
     │       ├── <a href="https://github.com/sign-language-translator/sign-language-translator/blob/main/sign_language_translator/languages/text/english.py">english.py</a>
-    │       ├── <a href="https://github.com/sign-language-translator/sign-language-translator/blob/main/sign_language_translator/languages/text/hindi.py">hindi.py</a>
-    │       ├── <a href="https://github.com/sign-language-translator/sign-language-translator/blob/main/sign_language_translator/languages/text/text_language.py">text_language.py</a> <sub><sup>Base class for text normalization, tokenization & tagging</sup></sub>
-    │       └── <a href="https://github.com/sign-language-translator/sign-language-translator/blob/main/sign_language_translator/languages/text/urdu.py">urdu.py</a>
+    │       └── <a href="https://github.com/sign-language-translator/sign-language-translator/blob/main/sign_language_translator/languages/text/text_language.py">text_language.py</a> <sub><sup>Base class for text normalization, tokenization & tagging</sup></sub>
     │
     ├── <b>models</b>
     │   ├── <a href="https://github.com/sign-language-translator/sign-language-translator/blob/main/sign_language_translator/models/_utils.py">_utils.py</a>

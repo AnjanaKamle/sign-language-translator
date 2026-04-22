@@ -362,34 +362,6 @@
             cursor: pointer;
         }
 
-        /* Gesture reference */
-        .gesture-ref {
-            margin-top: 1rem;
-            padding: 1rem;
-            background: rgba(0,0,0,0.2);
-            border-radius: 12px;
-        }
-        .gesture-ref h4 {
-            font-size: 0.75rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: var(--text-secondary);
-            margin-bottom: 0.5rem;
-        }
-        .gesture-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-            gap: 0.5rem;
-        }
-        .gesture-item {
-            background: rgba(255,255,255,0.05);
-            border-radius: 8px;
-            padding: 0.5rem;
-            text-align: center;
-            font-size: 0.85rem;
-        }
-        .gesture-item .emoji { font-size: 1.5rem; }
-        .gesture-item .label { color: var(--text-secondary); margin-top: 0.25rem; }
 
         @keyframes fadeIn {
             from { opacity: 0; transform: scale(0.98); }
@@ -468,19 +440,7 @@
                     </label>
                 </div>
 
-                <div class="gesture-ref">
-                    <h4>Supported Gestures</h4>
-                    <div class="gesture-grid">
-                        <div class="gesture-item"><div class="emoji">✋</div><div class="label">Hello / Stop</div></div>
-                        <div class="gesture-item"><div class="emoji">👍</div><div class="label">Good</div></div>
-                        <div class="gesture-item"><div class="emoji">👎</div><div class="label">Bad</div></div>
-                        <div class="gesture-item"><div class="emoji">✊</div><div class="label">Yes</div></div>
-                        <div class="gesture-item"><div class="emoji">☝️</div><div class="label">You</div></div>
-                        <div class="gesture-item"><div class="emoji">✌️</div><div class="label">Peace</div></div>
-                        <div class="gesture-item"><div class="emoji">🤙</div><div class="label">Call</div></div>
-                        <div class="gesture-item"><div class="emoji">🤟</div><div class="label">Love</div></div>
-                    </div>
-                </div>
+
             </div>
         </div>
     </div>
@@ -573,6 +533,11 @@
     const HOLD_THRESHOLD = 800; // ms to hold a sign before it's committed to sentence
     const COOLDOWN = 1500;      // ms between same sign commits
 
+    // ISL Deaf Clap tracking (both hands raised, palms forward, shaking)
+    let wristHistoryH1 = [];
+    let wristHistoryH2 = [];
+    let lastClapTime = 0;
+
     // ---- MediaPipe Hands Setup ----
     function initHands() {
         hands = new Hands({
@@ -649,10 +614,18 @@
                 });
             }
 
-            // Classify gesture from first detected hand
-            const lm = results.multiHandLandmarks[0];
-            const handedness = results.multiHandedness[0]?.label || 'Right';
-            const gesture = classifyGesture(lm, handedness);
+            // Check for two-hand ISL Deaf Clap first
+            let gesture = { name: '', confidence: 0 };
+            if (results.multiHandLandmarks.length === 2) {
+                gesture = detectISLClap(results.multiHandLandmarks);
+            }
+
+            // Fall back to single-hand classification
+            if (!gesture.name) {
+                const lm = results.multiHandLandmarks[0];
+                const handedness = results.multiHandedness[0]?.label || 'Right';
+                gesture = classifyGesture(lm, handedness);
+            }
 
             if (gesture.name) {
                 recognizedTextEl.innerText = gesture.name;
@@ -750,6 +723,46 @@
     //   9-12: MIDDLE (MCP, PIP, DIP, TIP)
     //   13-16: RING (MCP, PIP, DIP, TIP)
     //   17-20: PINKY (MCP, PIP, DIP, TIP)
+
+    // ISL Deaf Clap: Both hands raised, palms forward, shaking side-to-side
+    function detectISLClap(multiHandLandmarks) {
+        const lm1 = multiHandLandmarks[0];
+        const lm2 = multiHandLandmarks[1];
+
+        // Check both hands have open palms (non-thumb fingers extended)
+        const f1 = getFingerStates(lm1, 'Right');
+        const f2 = getFingerStates(lm2, 'Left');
+        const bothOpen = f1.slice(1).filter(Boolean).length >= 3
+                      && f2.slice(1).filter(Boolean).length >= 3;
+
+        // Both hands raised (wrists in upper portion of frame)
+        const bothRaised = lm1[0].y < 0.55 && lm2[0].y < 0.55;
+
+        // Track wrist x positions
+        wristHistoryH1.push(lm1[0].x);
+        wristHistoryH2.push(lm2[0].x);
+        if (wristHistoryH1.length > 15) wristHistoryH1.shift();
+        if (wristHistoryH2.length > 15) wristHistoryH2.shift();
+
+        if (bothOpen && bothRaised) {
+            const now = Date.now();
+            if (wristHistoryH1.length >= 8 && wristHistoryH2.length >= 8) {
+                const range1 = Math.max(...wristHistoryH1) - Math.min(...wristHistoryH1);
+                const range2 = Math.max(...wristHistoryH2) - Math.min(...wristHistoryH2);
+                if (range1 > 0.04 && range2 > 0.04 && (now - lastClapTime > 2000)) {
+                    lastClapTime = now;
+                    wristHistoryH1.length = 0;
+                    wristHistoryH2.length = 0;
+                    return { name: 'CLAP', confidence: 1.0 };
+                }
+            }
+        } else {
+            wristHistoryH1.length = 0;
+            wristHistoryH2.length = 0;
+        }
+
+        return { name: '', confidence: 0 };
+    }
 
     function classifyGesture(lm, handedness) {
         const fingers = getFingerStates(lm, handedness);

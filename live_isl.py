@@ -42,6 +42,9 @@ COOLDOWN_MS = 1500
 
 # Tracking properties
 wrist_x_history = collections.deque(maxlen=15)
+wrist_history_h1 = collections.deque(maxlen=15)  # hand 1 wrist x for ISL deaf clap
+wrist_history_h2 = collections.deque(maxlen=15)  # hand 2 wrist x for ISL deaf clap
+last_clap_time = 0
 last_expression = "Neutral"
 
 HAND_CONNECTIONS = [
@@ -58,126 +61,132 @@ def speak(text):
         subprocess.run(["say", "-v", "Samantha", text], check=False)
     threading.Thread(target=_say, daemon=True).start()
 
+
+
 def distance2d(p1, p2, w, h):
     return ((p1.x * w - p2.x * w)**2 + (p1.y * h - p2.y * h)**2) ** 0.5
 
 def get_finger_states(lm, w, h):
+    """Finger extension using PIP joints (mid-finger) — much more reliable than MCP."""
     wrist = lm[0]
-    thumb = distance2d(lm[4], lm[17], w, h) > distance2d(lm[3], lm[17], w, h)
-    index  = distance2d(lm[8], wrist, w, h) > distance2d(lm[5], wrist, w, h)
-    middle = distance2d(lm[12], wrist, w, h) > distance2d(lm[9], wrist, w, h)
-    ring   = distance2d(lm[16], wrist, w, h) > distance2d(lm[13], wrist, w, h)
-    pinky  = distance2d(lm[20], wrist, w, h) > distance2d(lm[17], wrist, w, h)
+
+    # Thumb: extended if tip (4) is far from index base (5)
+    # When thumb sticks out, tip moves away from index finger base
+    # When tucked (fist), tip stays near index base
+    thumb = distance2d(lm[4], lm[5], w, h) > distance2d(lm[3], lm[5], w, h)
+
+    # Fingers: tip further from wrist than PIP joint = extended
+    # PIP joints (6,10,14,18) are mid-finger — strong signal
+    # When extended: tip >> PIP distance from wrist
+    # When curled: tip ≈ or < PIP distance from wrist
+    index  = distance2d(lm[8],  wrist, w, h) > distance2d(lm[6],  wrist, w, h)
+    middle = distance2d(lm[12], wrist, w, h) > distance2d(lm[10], wrist, w, h)
+    ring   = distance2d(lm[16], wrist, w, h) > distance2d(lm[14], wrist, w, h)
+    pinky  = distance2d(lm[20], wrist, w, h) > distance2d(lm[18], wrist, w, h)
+
     return [thumb, index, middle, ring, pinky]
 
 def classify_gesture(results, w, h):
-    # Two hands logic for Namaste
+    # ── ISL DEAF CLAP: Both hands raised, palms forward, shaking ──
+    global last_clap_time, wrist_history_h1, wrist_history_h2
     if len(results.hand_landmarks) == 2:
         lm1 = results.hand_landmarks[0]
         lm2 = results.hand_landmarks[1]
-        dist_wrists = distance2d(lm1[0], lm2[0], w, h)
-        dist_index = distance2d(lm1[8], lm2[8], w, h)
-        if dist_wrists < (0.2 * w) and dist_index < (0.2 * w):
-            return "NAMASTE", 1.0
+        f1 = get_finger_states(lm1, w, h)
+        f2 = get_finger_states(lm2, w, h)
+        both_open = sum(f1[1:]) >= 3 and sum(f2[1:]) >= 3
+
+        # Both hands raised (wrists in upper portion of frame)
+        both_raised = lm1[0].y < 0.6 and lm2[0].y < 0.6
+
+        # Track wrist x positions for shake detection
+        wrist_history_h1.append(lm1[0].x * w)
+        wrist_history_h2.append(lm2[0].x * w)
+
+        if both_open and both_raised:
+            now = time.time() * 1000
+            # Detect shaking: lateral oscillation in at least one hand
+            if len(wrist_history_h1) >= 6 and len(wrist_history_h2) >= 6:
+                range1 = max(wrist_history_h1) - min(wrist_history_h1)
+                range2 = max(wrist_history_h2) - min(wrist_history_h2)
+                # Either hand shaking is enough (lowered threshold)
+                if (range1 > (0.025 * w) or range2 > (0.025 * w)) and (now - last_clap_time > 1200):
+                    last_clap_time = now
+                    wrist_history_h1.clear()
+                    wrist_history_h2.clear()
+                    return "CLAP", 1.0
+            # Two open raised hands but no shake yet — don't fall through to single-hand
+            return "CLAP_PENDING", 0.0
+        else:
+            wrist_history_h1.clear()
+            wrist_history_h2.clear()
 
     if not results.hand_landmarks:
         return None, 0
 
-    # Fallback to Single Hand
     lm = results.hand_landmarks[0]
     thumb, index, middle, ring, pinky = get_finger_states(lm, w, h)
-    all_ext = all([thumb, index, middle, ring, pinky])
-    all_curl = not any([thumb, index, middle, ring, pinky])
+    non_thumb_count = sum([index, middle, ring, pinky])
 
-    if distance2d(lm[4], lm[8], w, h) < (0.06 * w) and middle and ring and pinky: return "OK", 0.82
-    if thumb and index and not middle and not ring and pinky: return "LOVE", 0.88
-    if thumb and not index and not middle and not ring and pinky: return "CALL", 0.85
+    # ── OK: thumb tip touches index tip, making O shape. Other 3 fingers up ──
+    thumb_index_dist = distance2d(lm[4], lm[8], w, h)
+    if thumb_index_dist < (0.08 * w) and middle and ring and pinky:
+        return "OK", 0.85
 
-    if not thumb and index and not middle and not ring and not pinky: return "ONE", 0.85
-    if not thumb and index and middle and not ring and not pinky: return "TWO", 0.85
-    if not thumb and index and middle and ring and not pinky: return "THREE", 0.8
-    if not thumb and index and middle and ring and pinky: return "FOUR", 0.8
-    
-    if thumb and not index and not middle and not ring and not pinky:
-        if lm[4].y < lm[0].y: return "GOOD", 0.88
-        else: return "BAD", 0.85
+    # ── LOVE (ILY): thumb + index + pinky extended, middle & ring curled ──
+    if thumb and index and not middle and not ring and pinky:
+        return "LOVE", 0.88
 
-    # If all fingers are extended, it's either HELLO (moving) or FIVE (stable).
-    # We resolve this in the main loop using tracking.
-    if all_ext: return "FIVE_OR_HELLO", 0.9
-    
-    if all_curl: return "YES", 0.8
+    # ── CALL: thumb + pinky only ──
+    if thumb and not index and not middle and not ring and pinky:
+        return "CALL", 0.85
+
+    # ── Thumb-to-palm distance (reused below) ──
+    thumb_to_palm = distance2d(lm[4], lm[9], w, h)  # thumb tip to middle MCP
+
+    # ── Numbers: Do NOT check thumb (unreliable when tucked) ──
+    if non_thumb_count == 1 and index:
+        return "ONE", 0.85
+    if non_thumb_count == 2 and index and middle:
+        return "TWO", 0.85
+    if non_thumb_count == 3 and index and middle and ring:
+        return "THREE", 0.8
+
+    # ── FIVE / HELLO: all 4 fingers up + thumb spread — CHECK BEFORE FOUR ──
+    # Thumb clearly away from palm = open hand, not tucked
+    if non_thumb_count == 4 and thumb_to_palm >= (0.09 * w):
+        return "FIVE_OR_HELLO", 0.9
+
+    # ── FOUR: all 4 fingers up, thumb clearly tucked against palm ──
+    if non_thumb_count == 4 and thumb_to_palm < (0.09 * w):
+        return "FOUR", 0.8
+
+    # ── GOOD vs BAD vs YES: All 4 non-thumb fingers curled ──
+    if non_thumb_count == 0:
+        if thumb_to_palm > (0.08 * w):
+            if lm[4].y < lm[0].y:
+                return "GOOD", 0.88
+            else:
+                return "BAD", 0.85
+        else:
+            return "YES", 0.8
 
     return None, 0
 
-# Emoji Renderer for OpenCV
-legend_banner = None
-
-def overlay_transparent(background, overlay, x, y):
-    background_width = background.shape[1]
-    background_height = background.shape[0]
-
-    if x >= background_width or y >= background_height:
-        return background
-
-    h, w = overlay.shape[0], overlay.shape[1]
-
-    if x + w > background_width: w = background_width - x
-    if y + h > background_height: h = background_height - y
-
-    overlay = overlay[0:h, 0:w]
-    if overlay.shape[2] == 4:
-        alpha = overlay[..., 3] / 255.0
-        for c in range(0, 3):
-            background[y:y+h, x:x+w, c] = (alpha * overlay[..., c] + (1 - alpha) * background[y:y+h, x:x+w, c])
-    else:
-        background[y:y+h, x:x+w] = overlay
-    return background
-
 def apply_hud(frame, sign_name, expression):
-    global legend_banner
     h, w, c = frame.shape
-    banner_height = 100
-    banner_y = h - banner_height
 
-    if legend_banner is None or legend_banner.shape[1] != w:
-        legend_banner = np.full((banner_height, w, 3), (30, 20, 20), dtype=np.uint8)
-        
-        legend_items = [
-            ("ONE", "ONE"), ("TWO", "TWO"), ("THREE", "THREE"), ("FOUR", "FOUR"), ("FIVE", "FIVE"), ("HELLO", "HELLO"), ("NAMASTE", "NAMASTE"),
-            ("GOOD", "GOOD"), ("BAD", "BAD"), ("YES", "YES"), ("LOVE", "LOVE"), ("CALL", "CALL"), ("OK", "OK")
-        ]
-        
-        column_width = max(110, w // 7)
-        x_offset = 10
-        y_offset = 5
-        
-        for i, (name, text) in enumerate(legend_items):
-            if i == 7:
-                x_offset = 10
-                y_offset += 45
-            
-            emoji_path = f"assets/emojis/{name}.png"
-            if os.path.exists(emoji_path):
-                emoji_img = cv2.imread(emoji_path, cv2.IMREAD_UNCHANGED)
-                if emoji_img is not None:
-                    emoji_img = cv2.resize(emoji_img, (32, 32))
-                    legend_banner = overlay_transparent(legend_banner, emoji_img, x_offset, y_offset)
-            
-            cv2.putText(legend_banner, text, (x_offset + 40, y_offset + 22), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
-            x_offset += column_width
-
+    # Top bar with sign detection and face expression
     cv2.rectangle(frame, (0, 0), (w, 50), (15, 15, 30), -1)
-    
+
     det_text = sign_name if sign_name else "No sign"
     cv2.putText(frame, f"Sign: {det_text}", (10, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 144, 30), 2)
-    
+
     cv2.putText(frame, f"Sent: {' '.join(sentence[-5:])}", (230, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-    
-    # Show Facial Expression top right
+
+    # Facial Expression — top right
     cv2.putText(frame, f"Face: {expression}", (w - 180, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (144, 255, 30), 2)
 
-    frame[banner_y:h, 0:w] = legend_banner
     return frame
 
 def get_face_expression(face_results):
@@ -260,7 +269,7 @@ def main():
             
             # Motion check for HELLO vs FIVE
             if sign_name == "FIVE_OR_HELLO":
-                if len(wrist_x_history) == 15 and (max(wrist_x_history) - min(wrist_x_history)) > (0.05 * w):
+                if len(wrist_x_history) >= 8 and (max(wrist_x_history) - min(wrist_x_history)) > (0.07 * w):
                     sign_name = "HELLO"
                 else:
                     sign_name = "FIVE"
@@ -273,6 +282,9 @@ def main():
                     cv2.circle(frame, (int(point.x * w), int(point.y * h)), 5, (255, 144, 30), -1)
 
         now = time.time() * 1000
+        # CLAP_PENDING = two hands in position, waiting for shake. Don't register.
+        if sign_name == "CLAP_PENDING":
+            sign_name = None
         if sign_name:
             if sign_name == last_sign:
                 if (now - hold_start > HOLD_MS) and (now - last_sign_time > COOLDOWN_MS):
